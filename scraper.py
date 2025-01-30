@@ -110,6 +110,7 @@ class Database:
                 cover_url TEXT,
                 written_by TEXT,
                 narrated_by TEXT,
+                characters TEXT,
                 series_tag TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -160,8 +161,8 @@ class Database:
         self.cursor.execute('''
             INSERT OR REPLACE INTO content 
             (url, title, series, release_date, about, background, 
-             production, duration, isbn, written_by, narrated_by, cover_url, series_tag)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             production, duration, isbn, written_by, narrated_by, characters, cover_url, series_tag)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data['url'],
             data['title'],
@@ -174,6 +175,7 @@ class Database:
             data['isbn'],
             data['written_by'],
             data['narrated_by'],
+            data['characters'],
             data['cover_url'],
             data['series_tag']
         ))
@@ -320,6 +322,7 @@ class Scraper:
             'isbn': None,
             'written_by': None,
             'narrated_by': None,
+            'characters': None,
             'cover_url': None,
             'series_tag': None
         }
@@ -384,7 +387,36 @@ class Scraper:
                 elif tab_id == 'tab2':
                     data['background'] = content
                 elif tab_id == 'tab5':
-                    data['narrated_by'] = ', '.join([a.text.strip() for a in tab.find_all('a')])
+                    # Extract narrators and their characters  
+                    narrators = []
+                    characters = []
+
+                    # Find all elements with narrator info
+                    for element in tab.stripped_strings:
+                        # If element contains parentheses, it's likely a character
+                        if '(' in element and ')' in element:
+                            # Extract character name from between parentheses
+                            char = re.search(r'\((.*?)\)', element)
+                            if char:
+                                # Replace forward slashes with commas first
+                                char_string = char.group(1).replace('/', ',')
+                                # Split by comma and clean
+                                char_parts = [c.strip() for c in char_string.split(',')]
+                                # Add cleaned character names
+                                characters.extend([c for c in char_parts if c])
+                            
+                            # Handle narrator part
+                            narrator = element.split('(')[0].strip()
+                            if narrator:
+                                narrator_parts = [n.strip() for n in narrator.replace('/', ',').split(',')]
+                                narrators.extend(narrator_parts)
+                        elif element:
+                            narrator_parts = [n.strip() for n in element.replace('/', ',').split(',')]
+                            narrators.extend(narrator_parts)
+
+                    # Join the unique narrators and characters with proper formatting
+                    data['narrated_by'] = ', '.join(sorted(set(filter(None, narrators))))
+                    data['characters'] = ', '.join(sorted(set(filter(None, characters))))
                 elif tab_id == 'tab6':
                     data['production'] = content
                     # Extract duration and ISBN

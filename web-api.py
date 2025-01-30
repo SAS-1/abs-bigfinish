@@ -18,10 +18,11 @@ class AudioBookResponse(BaseModel):
     authors: Optional[list[str]]
     narrators: Optional[list[str]]
     narrator: Optional[str]
+    tags: Optional[list[str]]  # Ensure this matches OpenAPI spec
     publisher: str = "Big Finish"
     cover: Optional[str]
     series: Optional[list[object]]
-    language: str = "English"
+    language: str = "Eng"
     duration: Optional[int]
     isbn: Optional[str]
     description: Optional[str]
@@ -29,7 +30,6 @@ class AudioBookResponse(BaseModel):
     publishedDate: Optional[str]
     abridged: bool = False
     explicit: bool = False
-
 
 @app.get("/search/")
 async def search_audiobooks(query: str = Query(..., description="Title to search for")):
@@ -65,6 +65,7 @@ async def search_audiobooks(query: str = Query(..., description="Title to search
             author=row['written_by'],
             narrators=row['narrated_by'].split(', ') if row['narrated_by'] else None,
             narrator=row['narrated_by'],
+            tags=row['characters'].split(', ') if row['characters'] else None,  # Correctly formatted list
             cover=row['cover_url'],
             series=[{'series': row['series'], 'sequence': row['series_tag']}],
             duration=duration_minutes if duration_minutes else None,
@@ -76,6 +77,7 @@ async def search_audiobooks(query: str = Query(..., description="Title to search
         response_data.append(book_data)
 
     return {'matches': response_data}
+
 
 
 if __name__ == "__main__":
