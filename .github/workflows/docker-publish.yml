@@ -31,4 +31,4 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64  # Builds for both x86_64 and ARM64
-          tags: ghcr.io/SAS-1/abs-bigfinish:latest
+          tags: ghcr.io/sas-1/abs-bigfinish:latest
