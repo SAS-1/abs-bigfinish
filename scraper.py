@@ -17,7 +17,7 @@ headers = {
 }
 
 SERIES_MAPPING = {
-"Class": "Class (CL)",
+    "Class": "Class (CL)",
     "Counter-Measures": "Counter Measures (CM)",
     "Cyberman": "Cyberman (CY)",
     "Doctor Who - The Monthly Adventures": "D0. Dr Who - Main Range (MR)",
