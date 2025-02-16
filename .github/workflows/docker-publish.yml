@@ -2,7 +2,7 @@ name: Build and Publish Docker Image
 
 on:
   push:
-    branches: [main]  # Change to your default branch if different
+    branches: [main]  # Adjust if your default branch is different
 
 jobs:
   build-and-push:
@@ -30,4 +30,5 @@ jobs:
         with:
           context: .
           push: true
+          platforms: linux/amd64,linux/arm64  # Builds for both x86_64 and ARM64
           tags: ghcr.io/SAS-1/abs-bigfinish:latest
