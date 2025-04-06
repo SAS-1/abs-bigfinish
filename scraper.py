@@ -76,6 +76,10 @@ SERIES_MAPPING = {
     "Doctor Who - Unbound": "Unbound (UN)",
     "Vienna": "F7. Vienna",
     "Charlotte Pollard": "F8. Charlotte Pollard",
+    "Doctor Who - The Fugitive Doctor": "The Fugitive Doctor Adventures (FDA)",
+    "Call Me Master": "Call Me Master (CMM)",
+    "Susan's War": "Susan's War (SW)",
+    "V UK": "V - UK",
     # Add other series transformations as needed
 }
 
@@ -381,11 +385,10 @@ class Scraper:
         for tab_id in ['tab1', 'tab2', 'tab5', 'tab6']:
             tab = soup.find('div', {'id': tab_id})
             if tab:
-                content = tab.text.strip()
                 if tab_id == 'tab1':
-                    data['about'] = content
+                    data['about'] = str(tab)  # Preserves HTML formatting
                 elif tab_id == 'tab2':
-                    data['background'] = content
+                    data['background'] = str(tab)  # Preserves HTML formatting
                 elif tab_id == 'tab5':
                     # Extract narrators and their characters  
                     narrators = []
@@ -418,6 +421,7 @@ class Scraper:
                     data['narrated_by'] = ', '.join(sorted(set(filter(None, narrators))))
                     data['characters'] = ', '.join(sorted(set(filter(None, characters))))
                 elif tab_id == 'tab6':
+                    content = tab.text.strip()  # Production info doesn't need HTML
                     data['production'] = content
                     # Extract duration and ISBN
                     if 'Duration:' in content:
