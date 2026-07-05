@@ -1,6 +1,8 @@
 from operator import itemgetter
 
-from fastapi import FastAPI, Query
+import re
+from fastapi import FastAPI, Query, Request
+from starlette.middleware.base import BaseHTTPMiddleware
 from typing import List, Optional
 from pydantic import BaseModel
 from fuzzywuzzy import fuzz
@@ -8,6 +10,19 @@ from fuzzywuzzy import fuzz
 from scraper import Search
 
 app = FastAPI()
+
+
+class NormalizePathMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Collapse multiple slashes into one (e.g. //search -> /search)
+        path = request.scope.get('path', '')
+        normalized = re.sub(r'/{2,}', '/', path)
+        if normalized != path:
+            request.scope['path'] = normalized
+        return await call_next(request)
+
+
+app.add_middleware(NormalizePathMiddleware)
 
 
 class AudioBookResponse(BaseModel):
@@ -32,14 +47,26 @@ class AudioBookResponse(BaseModel):
     explicit: bool = False
 
 @app.get("/search/")
-async def search_audiobooks(query: str = Query(..., description="Title to search for")):
+async def search_audiobooks(query: str = Query(..., description="Title to search for"), mediaType: Optional[str] = Query(None, description="Optional media type filter, e.g. 'book'")):
     # Get search results
-    top_matches = Search().search(query)
+    # If mediaType provided, pass a token appended to the query so Search can filter without changing APIs
+    search_query = query
+    if mediaType:
+        search_query = f"{query}||{mediaType}"
+    top_matches = Search().search(search_query)
 
     # Calculate similarity scores and sort results
     scored_matches = []
     for match in top_matches:
-        score = fuzz.ratio(query.lower(), match['title'].lower())
+        # Defensive: some parsed results may be missing a title
+        title_text = (match.get('title') if isinstance(match, dict) else None) or ''
+        # Use token set ratio for more forgiving matching on multi-word titles
+        try:
+            score = fuzz.token_set_ratio(query, title_text)
+            if not score and match.get('about'):
+                score = fuzz.token_set_ratio(query, match.get('about')[:200])
+        except Exception:
+            score = 0
         scored_matches.append((score, match))
 
     # Sort by score in descending order
@@ -56,23 +83,36 @@ async def search_audiobooks(query: str = Query(..., description="Title to search
                 duration_minutes = int(row['duration'])
             except ValueError:
                 pass
+        # Build description by concatenating about and background if present
+        description = None
+        if row.get('about'):
+            description = row.get('about')
+        if row.get('background'):
+            if description:
+                description = f"{description}\n\n{row.get('background')}"
+            else:
+                description = row.get('background')
+
+        series_obj = None
+        if row.get('series'):
+            series_obj = [{'series': row['series'], 'sequence': row.get('series_tag')}]
 
         book_data = AudioBookResponse(
-            url=row['url'],
-            title=row['title'],
+            url=row.get('url'),
+            title=row.get('title'),
             subtitle=None,
-            authors=row['written_by'].split(', ') if row['written_by'] else None,
-            author=row['written_by'],
-            narrators=row['narrated_by'].split(', ') if row['narrated_by'] else None,
-            narrator=row['narrated_by'],
-            tags=row['characters'].split(', ') if row['characters'] else None,  # Correctly formatted list
-            cover=row['cover_url'],
-            series=[{'series': row['series'], 'sequence': row['series_tag']}],
+            authors=row.get('written_by').split(', ') if row.get('written_by') else None,
+            author=row.get('written_by'),
+            narrators=row.get('narrated_by').split(', ') if row.get('narrated_by') else None,
+            narrator=row.get('narrated_by'),
+            tags=row.get('characters').split(', ') if row.get('characters') else None,
+            cover=row.get('cover_url'),
+            series=series_obj,
             duration=duration_minutes if duration_minutes else None,
-            isbn=row['isbn'],
-            description=row['about'],
-            publishedYear=row['release_date'].split('-')[0] if row['release_date'] else None,
-            publishedDate=row['release_date'] if row['release_date'] else None,
+            isbn=row.get('isbn'),
+            description=description,
+            publishedYear=(row.get('release_date').split('-')[0] if row.get('release_date') else None),
+            publishedDate=row.get('release_date') if row.get('release_date') else None,
         )
         response_data.append(book_data)
 
