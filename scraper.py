@@ -456,6 +456,9 @@ class Scraper:
         # Prefer embedded JSON data when available (client-side rendered pages)
         embedded = DateParser.extract_embedded_release_data(html)
         if embedded:
+            print("ABOUT FIELD:", repr(embedded.get('about')))
+            print("DESCRIPTION FIELD:", repr(embedded.get('description')))
+        if embedded:
             # Map commonly available fields from the embedded object with robust fallbacks
             try:
                 # Title
@@ -490,8 +493,33 @@ class Scraper:
                             data['release_date'] = parsed
 
                 # About / description
-                data['about'] = (embedded.get('about') or embedded.get('description') or
-                                 (embedded.get('meta') or {}).get('description') or data['about'])
+                about = embedded.get('about')
+                
+                if isinstance(about, str):
+                    data['about'] = about
+                
+                elif isinstance(about, dict):
+                    summary = about.get('summary')
+                
+                    # Ignore obvious prices
+                    if (
+                        isinstance(summary, str)
+                        and len(summary) > 50
+                        and not summary.startswith('$')
+                    ):
+                        data['about'] = summary
+                
+                if not data['about']:
+                    description = embedded.get('description')
+                
+                    if isinstance(description, str) and len(description) > 50:
+                        data['about'] = description
+                
+                if not data['about']:
+                    meta_desc = (embedded.get('meta') or {}).get('description')
+                
+                    if isinstance(meta_desc, str) and len(meta_desc) > 50:
+                        data['about'] = meta_desc
 
                 # Writers / authors
                 writers = embedded.get('writers') or embedded.get('written_by') or (embedded.get('credits') or {}).get('writers')
@@ -523,7 +551,10 @@ class Scraper:
                     if any('mag' in t for t in types):
                         data['media_type'] = 'magazine'
                     # audio/book types may contain 'book' or 'audio' or 'abridged'
-                    elif any(sub in t for sub in ('book', 'audio', 'abridg', 'novel')):
+                    elif any(
+                        any(sub in media_type for sub in ('book', 'audio', 'abridg', 'novel'))
+                        for media_type in types
+                    ):
                         data['media_type'] = 'book'
                     elif types:
                         data['media_type'] = types[0]
@@ -686,24 +717,55 @@ class Scraper:
                 data['release_date'] = parsed_date
 
         # Parse writers and narrators
-        paragraphs = product_desc.find_all('p') if product_desc else []
-        if len(paragraphs) > 0:
-            data['written_by'] = ', '.join([a.text.strip() for a in paragraphs[0].find_all('a')])
-        if len(paragraphs) > 1:
-            data['narrated_by'] = ', '.join([a.text.strip() for a in paragraphs[1].find_all('a')])
+        #paragraphs = product_desc.find_all('p') if product_desc else []
+        #if len(paragraphs) > 0:
+        #    data['written_by'] = ', '.join([a.text.strip() for a in paragraphs[0].find_all('a')])
+        #if len(paragraphs) > 1:
+        #    data['narrated_by'] = ', '.join([a.text.strip() for a in paragraphs[1].find_all('a')])
+# Parse contributors from new Big Finish page layout
+
+        for p in soup.find_all("p"):
+        
+            label = p.find(
+                "span",
+                class_=lambda c: c and "font-medium" in str(c)
+            )
+        
+            if not label:
+                continue
+            
+            field_name = label.get_text(strip=True).rstrip(":")
+        
+            values = [
+                a.get_text(strip=True)
+                for a in p.find_all("a")
+            ]
+        
+            if not values:
+                continue
+            
+            if field_name == "Written By":
+                data["written_by"] = ", ".join(values)
+        
+            elif field_name == "Starring":
+                data["narrated_by"] = ", ".join(values)
+
 
         # Parse tabs content
         for tab_id in ['tab1', 'tab2', 'tab5', 'tab6']:
             tab = soup.find('div', {'id': tab_id})
             if tab:
                 if tab_id == 'tab1':
-                    data['about'] = str(tab)  # Preserves HTML formatting
-                elif tab_id == 'tab2':
-                    data['background'] = str(tab)  # Preserves HTML formatting
-                elif tab_id == 'tab5':
-                    # Extract narrators and their characters  
-                    narrators = []
-                    characters = []
+                    text = tab.get_text("\n", strip=True)
+
+                    if text and len(text) > len(data.get('about') or ''):
+                        data['about'] = text  # Preserves HTML formatting
+                    elif tab_id == 'tab2':
+                        data['background'] = str(tab)  # Preserves HTML formatting
+                    elif tab_id == 'tab5':
+                        # Extract narrators and their characters  
+                        narrators = []
+                        characters = []
 
                     # Find all elements with narrator info
                     for element in tab.stripped_strings:
@@ -752,7 +814,17 @@ class Scraper:
         if not data.get('characters'):
             try:
                 # find patterns like 'Actor Name (Character Name)' and collect character names
-                matches = re.findall(r"[A-Z][A-Za-z\-\. '\u00C0-\u017F]+\s*\(([^)]+)\)", html)
+                
+                if tab:
+                    source_text = tab.get_text(" ", strip=True)
+                else:
+                    source_text = ""
+                
+                matches = re.findall(
+                    r"[A-Z][A-Za-z\-\. '\u00C0-\u017F]+\s*\(([^)]+)\)",
+                    source_text
+                )
+
                 chars = []
                 for m in matches:
                     # split multi-character lists like 'Alice / Bob' or 'Alice, Bob'
@@ -780,6 +852,11 @@ class Scraper:
                         data[key] = str(val)
             elif isinstance(val, list):
                 data[key] = ', '.join([str(x) for x in val])
+
+
+        print("ABOUT:")
+        print(repr(data['about']))
+
 
         self.db.save_content(data)
         return data
@@ -874,7 +951,7 @@ class Search:
             if not hits:
                 hits = []
         except requests.exceptions.RequestException as e:
-            print(f'POST {api_url} failed: {e} — falling back to legacy suggest endpoint')
+            print(f'POST {api_url} failed: {e} â€” falling back to legacy suggest endpoint')
             # Fallback to legacy suggest endpoint (GET)
             suggest_url = f'{self.base_url}/search_results/suggest/{encoded_query}'
             try:
@@ -931,6 +1008,7 @@ class Search:
         # Note: we defer final media-type filtering until after parsing/synthesizing results
 
         for result in hits:
+            print(json.dumps(result, indent=2))
             # Try common id fields
             if not isinstance(result, dict):
                 continue
@@ -1022,23 +1100,69 @@ class Search:
                     # Try a couple of URL patterns to find the release page that contains embedded JSON
                     tried = []
                     candidates = []
+
                     if result.get('release_slug'):
-                        candidates.append(f"{self.base_url}/releases/{result.get('release_slug')}")
+                        candidates.append(
+                            f"{self.base_url}/releases/v/{result.get('release_slug')}"
+                        )
+
+                        # keep old format as fallback
+                        candidates.append(
+                            f"{self.base_url}/releases/{result.get('release_slug')}"
+                        )
+
                     if release_id:
-                        candidates.append(f"{self.base_url}/releases/v/{release_id}")
+                        candidates.append(
+                            f"{self.base_url}/releases/v/{release_id}"
+                        )
 
                     for candidate in candidates:
                         if db.is_missing_release(candidate):
                             continue
                         tried.append(candidate)
                         resp = requests.get(candidate, headers=headers)
+                        print(f"Trying enrichment URL: {candidate}")
+                        print(f"Status: {resp.status_code}")
                         if resp.status_code == 200:
                             parsed = Scraper(self.base_url).parse_data(candidate, resp.text)
+                            print(
+                                f"Parsed author={parsed.get('written_by')} "
+                                f"isbn={parsed.get('isbn')}"
+                            )
                             if parsed:
-                                # merge useful fields including full description/background
-                                for fld in ('written_by', 'narrated_by', 'characters', 'release_date', 'isbn', 'series', 'about', 'background'):
+                                for fld in (
+                                    'written_by',
+                                    'characters',
+                                    'release_date',
+                                    'isbn',
+                                    'series',
+                                    'about',
+                                    'background'
+                                ):
                                     if parsed.get(fld):
                                         synth[fld] = parsed.get(fld)
+
+                                # Special handling for cast
+                                search_cast = set()
+                                page_cast = set()
+
+                                if synth.get('narrated_by'):
+                                    search_cast.update(
+                                        x.strip()
+                                        for x in synth['narrated_by'].split(',')
+                                        if x.strip()
+                                    )
+
+                                if parsed.get('narrated_by'):
+                                    page_cast.update(
+                                        x.strip()
+                                        for x in parsed['narrated_by'].split(',')
+                                        if x.strip()
+                                    )
+
+                                synth['narrated_by'] = ', '.join(
+                                    sorted(search_cast | page_cast)
+                                )
                                 # stop after successful parse
                                 break
                         else:
@@ -1133,3 +1257,4 @@ def test():
     except Exception as e:
         print(f"\nAn error occurred: {e}")
         scraper.get_statistics()
+ 
