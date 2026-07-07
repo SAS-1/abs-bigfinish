@@ -7,6 +7,6 @@ Issues:
 
 * ~~ISBN Missing~~ Seems to be fixed
 * ~~Cast/Characters Missing~~ Needs some checks done
-* Description - only partial info returned
+* ~~Description - only partial info returned~~ Needs some checks done
 * Search is hit or miss
-* Series doesn't work
+* ~~Series doesn't work~~

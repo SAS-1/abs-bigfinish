@@ -32,8 +32,18 @@ SERIES_MAPPING = {
     "Doctor Who - The Seventh Doctor Adventures": "D7. The Seventh Doctor Adventures (7DA)",
     "Doctor Who - The Eighth Doctor Adventures": "D8. The Eighth Doctor Adventures (8DA)",
     "Doctor Who - The Ninth Doctor Adventures": "D9. The Ninth Doctor Adventures (9DA)",
+    "Doctor Who: The First Doctor Adventures": "D1. The First Doctor Adventures (1DA)",
+    "Doctor Who: The Tenth Doctor Adventures": "D10. The Tenth Doctor Adventures (10DA)",
+    "Doctor Who: The Second Doctor Adventures": "D2. The Second Doctor Adventures (2DA)",
+    "Doctor Who: The Third Doctor Adventures": "D3. The Third Doctor Adventures (3DA)",
+    "Doctor Who: The Fourth Doctor Adventures": "D4. The Fourth Doctor Adventures (4DA)",
+    "Doctor Who: The Fifth Doctor Adventures": "D5. The Fifth Doctor Adventures (5DA)",
+    "Doctor Who: The Sixth Doctor Adventures": "D6. The Sixth Doctor Adventures (6DA)",
+    "Doctor Who: The Seventh Doctor Adventures": "D7. The Seventh Doctor Adventures (7DA)",
+    "Doctor Who: The Eighth Doctor Adventures": "D8. The Eighth Doctor Adventures (8DA)",
+    "Doctor Who: The Ninth Doctor Adventures": "D9. The Ninth Doctor Adventures (9DA)",
     "Dalek Empire": "Dalek Empire (DE)",
-    "Dark Gallifrey (DG)": "Dark Gallifrey (DG)",
+    "Dark Gallifrey": "Dark Gallifrey (DG)",
     "Doctor Who - Destiny of the Doctor": "Destiny of the Doctor",
     "Doom's Day": "Doom's Day (DD)",
     "Bernice Summerfield": "F1. Bernice Summerfield (BS)",
@@ -51,6 +61,7 @@ SERIES_MAPPING = {
     "Doctor Who - Short Trips": "Short Trips (ST)",
     "Doctor Who - Short Trips Rarities": "Short Trips Rarities",
     "The Worlds of Doctor Who - Special Releases": "Special Releases (SP)",
+    "Doctor Who: The Classic Series: Special Releases": "Special Releases (SP)",
     "Torchwood - Monthly Range": "T0. Torchwood Main Range (TMR)",
     "Torchwood - Special Releases": "T1. Torchwood - Specials (TWsp)",
     "Torchwood One": "T2. Torchwood One (TW1)",
@@ -397,6 +408,76 @@ class Scraper:
     def get_all_links(self, html, only_releases=False):
         try:
             soup = BeautifulSoup(html, 'html.parser')
+
+
+            for i, rc in enumerate(rich_contents):
+                text = rc.get_text("\n", strip=True)
+
+                print(f"BLOCK {i}")
+                print(text[:300])
+
+
+            # Extract full About tab content from new Big Finish pages
+            try:
+                rich_contents = soup.find_all("div", class_="rich-content")
+            
+                for rc in rich_contents:
+                    text = rc.get_text("\n", strip=True)
+            
+                    # Skip tiny blocks
+                    if len(text) < 500:
+                        continue
+                    
+                    data["about"] = text
+            
+                    print("FOUND FULL ABOUT")
+                    print(text[:1000])
+            
+                    break
+                
+            except Exception as e:
+                print(f"About extraction failed: {e}")
+
+
+            about_panel = soup.find(
+                "div",
+                attrs={
+                    "role": "tabpanel",
+                    "aria-labelledby": re.compile(r".*trigger-about")
+                }
+            )
+
+            print("ABOUT PANEL FOUND:", about_panel is not None)
+
+            if about_panel:
+                print("ABOUT PANEL LENGTH:", len(str(about_panel)))
+
+            about_panel = soup.find(
+                "div",
+                attrs={
+                    "role": "tabpanel",
+                    "aria-labelledby": re.compile(r".*trigger-about")
+                }
+            )
+
+            if about_panel:
+                rich_content = about_panel.find("div", class_="rich-content")
+
+                if rich_content:
+                    #data["about"] = rich_content.get_text("\n", strip=True)
+                    data["about"] = str(rich_content)
+
+            print("PAGE TITLE:")
+            print(soup.title.string if soup.title else "NO TITLE")
+
+            print("SEARCHING FOR ABOUT TEXT...")
+
+            for text in soup.stripped_strings:
+                if "Rassilon" in text:
+                    print("FOUND:")
+                    print(text)
+
+
         except Exception as e:
             print(f"Error parsing HTML: {e}")
             return []
@@ -467,6 +548,15 @@ class Scraper:
             if embedded.get("production_credits"):
                 print("Production credits found")
 
+            
+            if embedded:
+                print("EMBEDDED KEYS:")
+                print(list(embedded.keys()))
+
+            if embedded:
+              print(json.dumps(embedded, indent=2)[:10000])    
+    
+
         if embedded:
             # Map commonly available fields from the embedded object with robust fallbacks
             try:
@@ -504,18 +594,23 @@ class Scraper:
                 # About
                 about = embedded.get("about")
                 
+                print("ABOUT FIELD:")
+                print(repr(about))
+
+
                 if isinstance(about, dict):
                     summary = about.get("summary")
-                
-                    if (
-                        isinstance(summary, str)
-                        and summary.strip()
-                        and not summary.startswith("$")
-                    ):
-                        data["about"] = summary
+
+                if (
+                    isinstance(summary, str)
+                    and summary.strip()
+                    and not summary.startswith("$")
+                ):
+                    data["about"] = summary
 
                 elif isinstance(about, str) and about.strip():
                     data["about"] = about
+
                 
                 if not data['about']:
                     description = embedded.get('description')
@@ -796,65 +891,82 @@ class Scraper:
             elif field_name == "Starring":
                 data["narrated_by"] = ", ".join(values)
 
+        # New Big Finish About extraction
+        rich_contents = soup.find_all("div", class_="rich-content")
+        
+        print(f"RICH CONTENT BLOCKS FOUND: {len(rich_contents)}")
+        
+        for rc in rich_contents:
+            text = rc.get_text("\n", strip=True)
+
+            # Ignore tiny blocks
+            if len(text) < 500:
+                continue
+            
+            data["about"] = text
+
+            print("FOUND FULL ABOUT")
+            print(text[:500])
+
+            break
+
+        for i, rc in enumerate(rich_contents):
+            text = rc.get_text("\n", strip=True)
+        
+            print(f"BLOCK {i}: {len(text)} chars")
 
         # Parse tabs content
         for tab_id in ['tab1', 'tab2', 'tab5', 'tab6']:
             tab = soup.find('div', {'id': tab_id})
-            if tab:
-                if tab_id == 'tab1':
-                    text = tab.get_text("\n", strip=True)
-
-                    if text and len(text) > len(data.get('about') or ''):
-                        data['about'] = text  # Preserves HTML formatting
-                    elif tab_id == 'tab2':
-                        data['background'] = str(tab)  # Preserves HTML formatting
-                    elif tab_id == 'tab5':
-                        # Extract narrators and their characters  
-                        narrators = []
-                        characters = []
-
-                    # Find all elements with narrator info
-                    for element in tab.stripped_strings:
-                        # If element contains parentheses, it's likely a character
-                        if '(' in element and ')' in element:
-                            # Extract character name from between parentheses
-                            char = re.search(r'\((.*?)\)', element)
-                            if char:
-                                # Replace forward slashes with commas first
-                                char_string = char.group(1).replace('/', ',')
-                                # Split by comma and clean
-                                char_parts = [c.strip() for c in char_string.split(',')]
-                                # Add cleaned character names
-                                characters.extend([c for c in char_parts if c])
-                            
-                            # Handle narrator part
-                            narrator = element.split('(')[0].strip()
-                            if narrator:
-                                narrator_parts = [n.strip() for n in narrator.replace('/', ',').split(',')]
-                                narrators.extend(narrator_parts)
-                        elif element:
-                            narrator_parts = [n.strip() for n in element.replace('/', ',').split(',')]
+        
+            if not tab:
+                continue
+                    
+            elif tab_id == 'tab2':
+                data['background'] = str(tab)
+        
+            elif tab_id == 'tab5':
+                # Extract narrators and their characters
+                narrators = []
+                characters = []
+        
+                for element in tab.stripped_strings:
+                    if '(' in element and ')' in element:
+                        char = re.search(r'\((.*?)\)', element)
+        
+                        if char:
+                            char_string = char.group(1).replace('/', ',')
+                            char_parts = [c.strip() for c in char_string.split(',')]
+                            characters.extend([c for c in char_parts if c])
+        
+                        narrator = element.split('(')[0].strip()
+        
+                        if narrator:
+                            narrator_parts = [n.strip() for n in narrator.replace('/', ',').split(',')]
                             narrators.extend(narrator_parts)
-
-                    # Join the unique narrators and characters with proper formatting
-                    data['narrated_by'] = ', '.join(sorted(set(filter(None, narrators))))
-                    data['characters'] = ', '.join(sorted(set(filter(None, characters))))
-                elif tab_id == 'tab6':
-                    content = tab.text.strip()  # Production info doesn't need HTML
-                    data['production'] = content
-                    # Extract duration and ISBN
-                    if 'Duration:' in content:
-                        data['duration'] = content.split('Duration: ')[1].split(' ')[0].split('\n')[0]
-                    if 'Digital Retail ISBN: ' in content:
-                        data['isbn'] = content.split('Digital Retail ISBN: ')[1].split(' ')[0].split('\n')[0]
-                        # Check if ISBN is valid
-                        if not re.match(r'\d{3}-\d{1,5}-\d{1,7}-\d{1}', data['isbn']):
-                            data['isbn'] = None
-                    elif 'Physical Retail ISBN: ' in content:
-                        data['isbn'] = content.split('Physical Retail ISBN: ')[1].split(' ')[0].split('\n')[0]
-                        # Check if ISBN is valid
-                        if not re.match(r'\d{3}-\d{1,5}-\d{1,7}-\d{1}', data['isbn']):
-                            data['isbn'] = None
+        
+                    elif element:
+                        narrator_parts = [n.strip() for n in element.replace('/', ',').split(',')]
+                        narrators.extend(narrator_parts)
+        
+                data['narrated_by'] = ', '.join(sorted(set(filter(None, narrators))))
+                data['characters'] = ', '.join(sorted(set(filter(None, characters))))
+        
+            elif tab_id == 'tab6':
+                content = tab.text.strip()
+                data['production'] = content
+        
+                if 'Duration:' in content:
+                    data['duration'] = content.split('Duration: ')[1].split(' ')[0].split('\n')[0]
+        
+                if 'Digital Retail ISBN: ' in content:
+                    data['isbn'] = content.split('Digital Retail ISBN: ')[1].split(' ')[0].split('\n')[0]
+        
+                elif 'Physical Retail ISBN: ' in content:
+                    data['isbn'] = content.split('Physical Retail ISBN: ')[1].split(' ')[0].split('\n')[0]
+                    # Check if ISBN is valid
+                    if not re.match(r'\d{3}-\d{1,5}-\d{1,7}-\d{1}', data['isbn']):
+                        data['isbn'] = None
 
         # If characters still missing, attempt a broad regex scan for 'Name (Character)' patterns in the HTML
         if not data.get('characters'):
@@ -1167,8 +1279,14 @@ class Search:
                             continue
                         tried.append(candidate)
                         resp = requests.get(candidate, headers=headers)
-                        print(f"Trying enrichment URL: {candidate}")
-                        print(f"Status: {resp.status_code}")
+                        print("ABOUT PANEL EXISTS:",
+                              "trigger-about" in resp.text)
+
+                        print("RICH CONTENT EXISTS:",
+                              "rich-content" in resp.text)
+
+                        print("PROPAGANDA EXISTS:",
+                              "Propaganda by Georgia Cook" in resp.text)
                         if resp.status_code == 200:
                             parsed = Scraper(self.base_url).parse_data(candidate, resp.text)
                             print(
