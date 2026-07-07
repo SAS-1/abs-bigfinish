@@ -456,8 +456,17 @@ class Scraper:
         # Prefer embedded JSON data when available (client-side rendered pages)
         embedded = DateParser.extract_embedded_release_data(html)
         if embedded:
-            print("ABOUT FIELD:", repr(embedded.get('about')))
-            print("DESCRIPTION FIELD:", repr(embedded.get('description')))
+            print("Found embedded release data")
+        
+            if embedded.get("cast"):
+                print(f"Cast count: {len(embedded['cast'])}")
+        
+            if embedded.get("about"):
+                print("About section found")
+        
+            if embedded.get("production_credits"):
+                print("Production credits found")
+
         if embedded:
             # Map commonly available fields from the embedded object with robust fallbacks
             try:
@@ -492,22 +501,21 @@ class Scraper:
                         if parsed:
                             data['release_date'] = parsed
 
-                # About / description
-                about = embedded.get('about')
+                # About
+                about = embedded.get("about")
                 
-                if isinstance(about, str):
-                    data['about'] = about
+                if isinstance(about, dict):
+                    summary = about.get("summary")
                 
-                elif isinstance(about, dict):
-                    summary = about.get('summary')
-                
-                    # Ignore obvious prices
                     if (
                         isinstance(summary, str)
-                        and len(summary) > 50
-                        and not summary.startswith('$')
+                        and summary.strip()
+                        and not summary.startswith("$")
                     ):
-                        data['about'] = summary
+                        data["about"] = summary
+
+                elif isinstance(about, str) and about.strip():
+                    data["about"] = about
                 
                 if not data['about']:
                     description = embedded.get('description')
@@ -521,19 +529,42 @@ class Scraper:
                     if isinstance(meta_desc, str) and len(meta_desc) > 50:
                         data['about'] = meta_desc
 
-                # Writers / authors
-                writers = embedded.get('writers') or embedded.get('written_by') or (embedded.get('credits') or {}).get('writers')
-                if writers:
-                    if isinstance(writers, list):
-                        names = []
-                        for w in writers:
-                            if isinstance(w, dict):
-                                names.append(w.get('name') or w.get('full_name') or '')
-                            else:
-                                names.append(str(w))
-                        data['written_by'] = ', '.join([n for n in names if n])
-                    else:
-                        data['written_by'] = str(writers)
+                # Writers
+                writers = embedded.get("written_by")
+
+                if isinstance(writers, list):
+                
+                    names = []
+
+                    for writer in writers:
+                        if isinstance(writer, dict):
+                            name = writer.get("name")
+
+                            if name:
+                                names.append(name)
+
+                    if names:
+                        data["written_by"] = ", ".join(names)
+
+                    if not data.get("written_by"):
+
+                        production_credits = embedded.get("production_credits", {})
+
+                        writers = production_credits.get("writer")
+
+                        if isinstance(writers, list):
+                        
+                            names = []
+
+                            for writer in writers:
+                                if isinstance(writer, dict):
+                                    name = writer.get("name")
+
+                                    if name:
+                                        names.append(name)
+
+                            if names:
+                                data["written_by"] = ", ".join(names)
 
                 # Image / cover
                 img = embedded.get('image') or embedded.get('cover') or embedded.get('cover_url') or (embedded.get('meta') or {}).get('image')
@@ -560,47 +591,62 @@ class Scraper:
                         data['media_type'] = types[0]
 
                 # Technical details: duration and ISBN
-                tech = embedded.get('technical_details') or embedded.get('technical') or embedded.get('meta')
-                if tech and isinstance(tech, dict):
-                    dur = tech.get('duration') or tech.get('length')
-                    if dur:
-                        # dur may be "120" or "120 mins" or "2 hours"
-                        m = re.search(r"(\d{1,4})", str(dur))
-                        if m:
-                            data['duration'] = m.group(1)
-                    isbn = tech.get('isbn') or tech.get('Digital Retail ISBN') or tech.get('digital_isbn')
-                    if isbn:
-                        data['isbn'] = str(isbn)
+                production_credits = embedded.get("production_credits", {})
 
-                # Cast / contributors
-                cast = embedded.get('cast') or embedded.get('contributors') or (embedded.get('credits') or {}).get('cast')
-                if cast and isinstance(cast, list):
-                    narrators = []
+                if isinstance(production_credits, dict):
+                
+                    tech = production_credits.get("technical_details", {})
+
+                    if isinstance(tech, dict):
+                    
+                        duration = (
+                            tech.get("duration_digital_verified_minutes")
+                            or tech.get("duration_physical_verified_minutes")
+                        )
+
+                        if duration:
+                            data["duration"] = str(duration)
+
+                        isbn = (
+                            tech.get("digital_retail_isbn")
+                            or tech.get("physical_retail_isbn")
+                        )
+
+                        if isbn:
+                            data["isbn"] = isbn
+
+                # Cast
+                cast = embedded.get("cast")
+
+                if isinstance(cast, list):
+                
+                    actors = []
                     characters = []
-                    for c in cast:
-                        # contributor dicts often include 'person'/'name' and 'role'/'character'
-                        if isinstance(c, dict):
-                            name = c.get('name') or c.get('person') or c.get('actor') or c.get('full_name')
-                            # role field may be 'role', 'character', 'as', or nested
-                            role = c.get('role') or c.get('character') or c.get('as') or c.get('role_name')
-                            # Some structures include an array of roles under 'roles' or 'characters'
-                            if not role and 'roles' in c and isinstance(c.get('roles'), list):
-                                role = ', '.join([r.get('name') if isinstance(r, dict) else str(r) for r in c.get('roles')])
-                            if name:
-                                narrators.append(name)
-                            if role:
-                                if isinstance(role, list):
-                                    characters.extend([str(r) for r in role])
-                                elif isinstance(role, dict):
-                                    characters.append(role.get('name') or str(role))
-                                else:
-                                    characters.extend([rc.strip() for rc in str(role).replace('/', ',').split(',') if rc.strip()])
-                        else:
-                            narrators.append(str(c))
-                    if narrators:
-                        data['narrated_by'] = ', '.join(sorted(set([n for n in narrators if n])))
+
+                    for member in cast:
+                    
+                        if not isinstance(member, dict):
+                            continue
+                        
+                        actor = member.get("name")
+                        role = member.get("label")
+
+                        if actor:
+                            actors.append(actor)
+
+                        if role:
+                        
+                            for part in re.split(r"/|,|;", role):
+                                part = part.strip()
+
+                                if part:
+                                    characters.append(part)
+
+                    if actors:
+                        data["narrated_by"] = ", ".join(sorted(set(actors)))
+
                     if characters:
-                        data['characters'] = ', '.join(sorted(set([c for c in characters if c])))
+                        data["characters"] = ", ".join(sorted(set(characters)))
 
                 # If writers still missing, look in contributors for role=Writer/Author
                 if not data.get('written_by'):
@@ -854,9 +900,9 @@ class Scraper:
                 data[key] = ', '.join([str(x) for x in val])
 
 
-        print("ABOUT:")
-        print(repr(data['about']))
-
+        print("Characters:")
+        if data.get('characters'):
+            print(f"  {data['characters']}")
 
         self.db.save_content(data)
         return data
