@@ -1,6 +1,5 @@
 # abs-bigfinish
 
-<<<<<<< HEAD
 ## Overview
 
 This is a fork of  Vito0912/abs-bigfinish original Big Finish scraper for Audiobookshelf. 
