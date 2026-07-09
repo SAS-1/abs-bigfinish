@@ -71,7 +71,7 @@ Replace the example IP address with the IP address or hostname of your Docker ho
 
 ## Known Issues
 
-- Search results can sometimes be inconsistent depending on the title searched.
+- Search results can sometimes be inconsistent depending on the title searched. Especially if : is present in search - workaround is remove the special character and research. 
 - Metadata quality depends on the information available on the Big Finish website.
 
 Previously Reported Issues
@@ -80,14 +80,5 @@ Previously Reported Issues
 - ✅ Cast/Characters missing — appears fixed
 - ✅ Description only partially returned — appears fixed
 - ✅ Series information not working — appears fixed
+
 =======
-1st attemp to rewrite for new Bigfinish website. 
-Site uses NEXT JS to provid*e data and is not easy to get data from.
-
-Issues:
-
-* ~~ISBN Missing~~ Seems to be fixed
-* ~~Cast/Characters Missing~~ Needs some checks done
-* ~~Description - only partial info returned~~ Needs some checks done
-* Search is hit or miss
-* ~~Series doesn't work~~

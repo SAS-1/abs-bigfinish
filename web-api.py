@@ -5,7 +5,7 @@ from fastapi import FastAPI, Query, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import List, Optional
 from pydantic import BaseModel
-from fuzzywuzzy import fuzz
+from rapidfuzz import fuzz
 
 from scraper import Search
 
