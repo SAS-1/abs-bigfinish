@@ -91,4 +91,3 @@ Issues:
 * ~~Description - only partial info returned~~ Needs some checks done
 * Search is hit or miss
 * ~~Series doesn't work~~
->>>>>>> 7801fc55270fddae8803b6eb6beeb306da195e62
