@@ -1,5 +1,6 @@
 # abs-bigfinish
 
+<<<<<<< HEAD
 ## Overview
 
 This is a fork of  Vito0912/abs-bigfinish original Big Finish scraper for Audiobookshelf. 
@@ -80,3 +81,15 @@ Previously Reported Issues
 - ✅ Cast/Characters missing — appears fixed
 - ✅ Description only partially returned — appears fixed
 - ✅ Series information not working — appears fixed
+=======
+1st attemp to rewrite for new Bigfinish website. 
+Site uses NEXT JS to provid*e data and is not easy to get data from.
+
+Issues:
+
+* ~~ISBN Missing~~ Seems to be fixed
+* ~~Cast/Characters Missing~~ Needs some checks done
+* ~~Description - only partial info returned~~ Needs some checks done
+* Search is hit or miss
+* ~~Series doesn't work~~
+>>>>>>> 7801fc55270fddae8803b6eb6beeb306da195e62

@@ -1,6 +1,6 @@
 # Dockerfile
 #FROM python:3.12-slim
-FROM python:alpine
+FROM python:3.12-alpine
 
 # Set working directory
 WORKDIR /app
